@@ -41,6 +41,7 @@ $PyInstallerArgs = @(
     "main.py"
 )
 & $Python -m PyInstaller @PyInstallerArgs
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed with exit code $LASTEXITCODE" }
 
 $ReleaseDir = Join-Path $Root "release_windows"
 if (Test-Path $ReleaseDir) { Remove-Item -Recurse -Force $ReleaseDir }
@@ -61,6 +62,7 @@ if (-not $Iscc) {
     $IsccPath = $Iscc.Source
 }
 & $IsccPath "installer\PodcastRadar.iss"
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
 $HashFile = Join-Path $ReleaseDir "SHA256SUMS.txt"
 Get-ChildItem $ReleaseDir -File | Where-Object { $_.Name -ne "SHA256SUMS.txt" } | ForEach-Object {

@@ -107,7 +107,7 @@ def save_api_key(dotenv_path: Path, api_key: str) -> None:
 
 def ensure_runtime_available() -> None:
     if ensure_ffmpeg_on_path() is None:
-        raise TranscriptionError("未找到 ffmpeg。请重新运行 setup_macos.command，或安装系统 ffmpeg。")
+        raise TranscriptionError("未找到 ffmpeg。请重新安装应用，或重新运行当前系统的初始化脚本。")
 
 
 def transcribe_file(
