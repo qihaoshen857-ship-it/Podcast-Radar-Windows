@@ -1,0 +1,24 @@
+# Podcast Radar for Windows v0.4.42
+
+这是 Podcast Radar 的首个 Windows x64 公开测试版，与 Mac v0.4.42 共用核心功能。
+
+## 下载选择
+
+- `PodcastRadar-Setup-0.4.42-x64.exe`：推荐安装包。
+- `PodcastRadar-Portable-0.4.42-x64.zip`：免安装版，完整解压后运行。
+- `SHA256SUMS.txt`：下载后校验文件完整性。
+
+## 主要功能
+
+- AI、AI 创业、天气、养生等播客主题雷达。
+- Dylan Patel、Elon Musk 人物访谈监控与转录入口。
+- 本地 Whisper 优先，也可填写自己的阿里云 DashScope API Key 使用云端 ASR。
+- 英文标题自动汉化、中文纪要、完整译文和深度阅读页。
+- 任务进度、重试提示与滑板小恐龙加载动画。
+
+## Windows 说明
+
+- 支持 Windows 10/11 x64。
+- 应用数据位于 `%LOCALAPPDATA%\PodcastRadar`。
+- 当前测试版没有商业代码签名，首次运行可能出现 SmartScreen 提示。请只从本 Release 下载并核对 SHA-256。
+- 本地 Whisper 首次使用会下载模型，需要一定等待时间和磁盘空间。
