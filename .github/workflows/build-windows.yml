@@ -1,0 +1,67 @@
+name: Build Windows packages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*-win.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-build-windows.txt
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build and test
+        shell: powershell
+        run: .\build_windows.ps1
+
+      - name: Install package and run frozen self-check
+        shell: powershell
+        run: |
+          $Installer = Resolve-Path "release_windows\PodcastRadar-Setup-0.4.42-x64.exe"
+          $InstallRoot = Join-Path $env:RUNNER_TEMP "PodcastRadarInstalled"
+          $SelfCheck = Join-Path $env:RUNNER_TEMP "podcast-radar-self-check.json"
+          $InstallProcess = Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$InstallRoot" -Wait -PassThru
+          if ($InstallProcess.ExitCode -ne 0) { throw "Installer failed with exit code $($InstallProcess.ExitCode)" }
+          $AppProcess = Start-Process -FilePath (Join-Path $InstallRoot "Podcast Radar.exe") -ArgumentList "--self-check", $SelfCheck -Wait -PassThru
+          if ($AppProcess.ExitCode -ne 0) { throw "Frozen self-check failed with exit code $($AppProcess.ExitCode)" }
+          $Result = Get-Content $SelfCheck -Raw | ConvertFrom-Json
+          $Result | ConvertTo-Json -Depth 5
+          if (-not $Result.ok) { throw "Frozen self-check did not pass." }
+          Copy-Item $SelfCheck "release_windows\SELF_CHECK_WINDOWS.json"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PodcastRadar-Windows-0.4.42
+          path: release_windows/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" release_windows/PodcastRadar-Setup-0.4.42-x64.exe release_windows/PodcastRadar-Portable-0.4.42-x64.zip release_windows/SHA256SUMS.txt release_windows/SELF_CHECK_WINDOWS.json --verify-tag --title "Podcast Radar for Windows v0.4.42" --notes-file WINDOWS_RELEASE_NOTES.md
