@@ -35,25 +35,32 @@ jobs:
         shell: powershell
         run: .\build_windows.ps1
 
-      - name: Install package and run frozen self-check
+      - name: Install package and run frozen UI self-check
         shell: powershell
         run: |
-          $Installer = Resolve-Path "release_windows\PodcastRadar-Setup-0.4.42-x64.exe"
+          $Installer = Resolve-Path "release_windows\PodcastRadar-Setup-0.4.43-x64.exe"
           $InstallRoot = Join-Path $env:RUNNER_TEMP "PodcastRadarInstalled"
           $SelfCheck = Join-Path $env:RUNNER_TEMP "podcast-radar-self-check.json"
           $InstallProcess = Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$InstallRoot" -Wait -PassThru
           if ($InstallProcess.ExitCode -ne 0) { throw "Installer failed with exit code $($InstallProcess.ExitCode)" }
-          $AppProcess = Start-Process -FilePath (Join-Path $InstallRoot "Podcast Radar.exe") -ArgumentList "--self-check", $SelfCheck -Wait -PassThru
-          if ($AppProcess.ExitCode -ne 0) { throw "Frozen self-check failed with exit code $($AppProcess.ExitCode)" }
+          $AppProcess = Start-Process -FilePath (Join-Path $InstallRoot "Podcast Radar.exe") -ArgumentList "--ui-smoke-check", $SelfCheck -PassThru
+          if (-not $AppProcess.WaitForExit(120000)) {
+            $AppProcess.Kill()
+            throw "Frozen UI self-check timed out after 120 seconds."
+          }
+          if ($AppProcess.ExitCode -ne 0) { throw "Frozen UI self-check failed with exit code $($AppProcess.ExitCode)" }
           $Result = Get-Content $SelfCheck -Raw | ConvertFrom-Json
           $Result | ConvertTo-Json -Depth 5
           if (-not $Result.ok) { throw "Frozen self-check did not pass." }
+          if (-not $Result.checks.tk_ui_smoke) { throw "Tk UI smoke check did not pass." }
+          if (-not $Result.ui_smoke.update_idletasks_completed) { throw "Tk update_idletasks was not completed." }
+          if (-not $Result.ui_smoke.safe_exit_completed) { throw "Tk UI did not exit safely." }
           Copy-Item $SelfCheck "release_windows\SELF_CHECK_WINDOWS.json"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PodcastRadar-Windows-0.4.42
+          name: PodcastRadar-Windows-0.4.43
           path: release_windows/*
           if-no-files-found: error
           retention-days: 30
@@ -64,4 +71,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" release_windows/PodcastRadar-Setup-0.4.42-x64.exe release_windows/PodcastRadar-Portable-0.4.42-x64.zip release_windows/SHA256SUMS.txt release_windows/SELF_CHECK_WINDOWS.json --verify-tag --title "Podcast Radar for Windows v0.4.42" --notes-file WINDOWS_RELEASE_NOTES.md
+          gh release create "$env:GITHUB_REF_NAME" release_windows/PodcastRadar-Setup-0.4.43-x64.exe release_windows/PodcastRadar-Portable-0.4.43-x64.zip release_windows/SHA256SUMS.txt release_windows/SELF_CHECK_WINDOWS.json --verify-tag --title "Podcast Radar for Windows v0.4.43" --notes-file WINDOWS_RELEASE_NOTES.md

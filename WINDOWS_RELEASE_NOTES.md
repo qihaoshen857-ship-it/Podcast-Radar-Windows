@@ -1,11 +1,17 @@
-# Podcast Radar for Windows v0.4.42
+# Podcast Radar for Windows v0.4.43
 
-这是 Podcast Radar 的首个 Windows x64 公开测试版，与 Mac v0.4.42 共用核心功能。
+这是 Podcast Radar 的 Windows 11 启动兼容性紧急修复版。Mac 版本不受影响。
+
+## 本次修复
+
+- 修复启动阶段 `_tkinter.TclError: bad cursor spec "pointinghand"`，全部可点击控件统一使用 Windows/Tk 支持的 `hand2` cursor。
+- Windows CI 在静默安装后运行实际 EXE，完整初始化 Tk 与主界面、执行 `update_idletasks`，再安全退出。
+- 发布自检文件同时记录运行时依赖、Tk UI 初始化和安全退出结果。
 
 ## 下载选择
 
-- `PodcastRadar-Setup-0.4.42-x64.exe`：推荐安装包。
-- `PodcastRadar-Portable-0.4.42-x64.zip`：免安装版，完整解压后运行。
+- `PodcastRadar-Setup-0.4.43-x64.exe`：推荐安装包。
+- `PodcastRadar-Portable-0.4.43-x64.zip`：免安装版，完整解压后运行。
 - `SHA256SUMS.txt`：下载后校验文件完整性。
 
 ## 主要功能

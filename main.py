@@ -79,7 +79,8 @@ from app.transcription import (
 
 
 APP_NAME = "Podcast Radar"
-APP_VERSION = "0.4.42"
+APP_VERSION = "0.4.43"
+CLICKABLE_CURSOR = "hand2"
 TRANSCRIPTION_MODE_OPTIONS = {
     "本地优先": "local_first",
     "极速云端": "cloud_fast",
@@ -2862,7 +2863,7 @@ class YTAudioDownloaderApp:
             height=height,
             highlightthickness=0,
             bd=0,
-            cursor="pointinghand",
+            cursor=CLICKABLE_CURSOR,
         )
         button_bg = create_rounded_rect(
             canvas,
@@ -2958,7 +2959,7 @@ class YTAudioDownloaderApp:
             padx=12,
             pady=6,
             font=(FONT_UI, 10, "bold"),
-            cursor="pointinghand",
+            cursor=CLICKABLE_CURSOR,
         )
         menu = tk.Menu(
             menu_button,
@@ -3064,7 +3065,7 @@ class YTAudioDownloaderApp:
                 fg=COLOR_TEXT,
                 bg=COLOR_SIDEBAR,
                 font=(FONT_UI, 11, "bold"),
-                cursor="pointinghand",
+                cursor=CLICKABLE_CURSOR,
             )
             button.pack(fill="x", padx=14, pady=4)
             if page_key == "favorites":
@@ -3653,7 +3654,7 @@ class YTAudioDownloaderApp:
             height=row_height,
             highlightthickness=0,
             bd=0,
-            cursor="pointinghand",
+            cursor=CLICKABLE_CURSOR,
         )
         row._card_bg = bg
         row._card_border = border
@@ -4058,7 +4059,7 @@ class YTAudioDownloaderApp:
                 justify="left",
                 anchor="w",
                 wraplength=wrap_width,
-                cursor="pointinghand",
+                cursor=CLICKABLE_CURSOR,
                 font=(FONT_UI, 9),
             )
             link_label.pack(fill="x", pady=(0, 7))
@@ -11427,8 +11428,8 @@ def convert_audio_file(source_path: Path, target_path: Path, progress_callback=N
         progress_callback(100.0, position_text)
 
 
-def run_self_check(output_path: Path | None = None) -> int:
-    """Validate a frozen Windows build without opening the GUI."""
+def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -> int:
+    """Validate a frozen Windows build and optionally exercise Tk startup."""
     ensure_dir(APP_DIR)
     ensure_runtime_path()
     ensure_ffmpeg_on_path()
@@ -11450,6 +11451,48 @@ def run_self_check(output_path: Path | None = None) -> int:
         "faster_whisper": importlib.util.find_spec("faster_whisper") is not None,
         **{f"runtime_{name}": available for name, available in runtime.items()},
     }
+    ui_smoke = {
+        "requested": check_ui,
+        "tk_initialized": False,
+        "app_initialized": False,
+        "update_idletasks_completed": False,
+        "safe_exit_completed": False,
+        "error": "",
+    }
+    if check_ui:
+        root: tk.Tk | None = None
+        try:
+            root = tk.Tk()
+            ui_smoke["tk_initialized"] = True
+            root.withdraw()
+            style = ttk.Style(root)
+            try:
+                style.theme_use("clam")
+            except Exception:
+                pass
+            YTAudioDownloaderApp(root)
+            ui_smoke["app_initialized"] = True
+            root.update_idletasks()
+            ui_smoke["update_idletasks_completed"] = True
+        except Exception as exc:
+            ui_smoke["error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            if root is not None:
+                try:
+                    root.destroy()
+                    ui_smoke["safe_exit_completed"] = True
+                except Exception as exc:
+                    if not ui_smoke["error"]:
+                        ui_smoke["error"] = f"{type(exc).__name__}: {exc}"
+        checks["tk_ui_smoke"] = all(
+            ui_smoke[key]
+            for key in (
+                "tk_initialized",
+                "app_initialized",
+                "update_idletasks_completed",
+                "safe_exit_completed",
+            )
+        ) and not ui_smoke["error"]
     payload = {
         "app": APP_NAME,
         "version": APP_VERSION,
@@ -11457,6 +11500,7 @@ def run_self_check(output_path: Path | None = None) -> int:
         "frozen": bool(getattr(sys, "frozen", False)),
         "app_dir": str(APP_DIR),
         "checks": checks,
+        "ui_smoke": ui_smoke,
         "ok": all(checks.values()),
     }
     rendered = json.dumps(payload, ensure_ascii=False, indent=2)
@@ -11469,10 +11513,14 @@ def run_self_check(output_path: Path | None = None) -> int:
 
 
 def main() -> int:
-    if "--self-check" in sys.argv:
-        arg_index = sys.argv.index("--self-check") + 1
+    check_arg = next(
+        (arg for arg in ("--ui-smoke-check", "--self-check") if arg in sys.argv),
+        None,
+    )
+    if check_arg is not None:
+        arg_index = sys.argv.index(check_arg) + 1
         output_path = Path(sys.argv[arg_index]) if arg_index < len(sys.argv) else None
-        return run_self_check(output_path)
+        return run_self_check(output_path, check_ui=check_arg == "--ui-smoke-check")
     ensure_dir(APP_DIR)
     ensure_runtime_path()
     ensure_dir(DEFAULT_DOWNLOAD_DIR)

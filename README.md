@@ -45,7 +45,7 @@ Windows 版与 Mac 版共用同一套核心功能，转录默认采用**本地 W
 
 ## 版本
 
-当前 Windows 首发版基于 Podcast Radar v0.4.42。主要包含人物监控转录、英文标题汉化、阅读页优化、ENSO 权重提升和可见任务进度等更新。
+当前 Windows 版为 Podcast Radar v0.4.43。该紧急修复版解决 Windows 11 启动时的 Tk cursor 兼容性问题，并在 CI 中加入安装后真实 UI 启动自检。
 
 ## License
 
