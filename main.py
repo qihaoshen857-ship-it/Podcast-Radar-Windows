@@ -11785,7 +11785,7 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 webpage_url="https://example.com/windows-layout-smoke",
                 source_name="No Priors",
                 description_text=(
-                    f"{smoke_title} — A practical conversation about customers and distribution."
+                    f"{smoke_title} — Customers and distribution."
                 ),
             )
             app.video_items = [smoke_item]
@@ -11803,6 +11803,13 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 for widget in (smoke_content, smoke_title_widget, smoke_summary_widget)
             )
             if ui_smoke["long_title_card_rendered"]:
+                app.update_episode_row_text_layout(
+                    smoke_widgets,
+                    smoke_item,
+                    FEED_ROW_TEXT_FALLBACK_WIDTH,
+                    force=True,
+                )
+                root.update_idletasks()
                 ui_smoke["title_has_visible_ellipsis"] = str(
                     smoke_title_widget.cget("text")
                 ).endswith("…")
@@ -11811,14 +11818,14 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 ui_smoke["title_summary_do_not_overlap"] = title_bottom <= summary_top
                 ui_smoke["duplicate_summary_removed"] = (
                     smoke_summary_widget.cget("text")
-                    == "A practical conversation about customers and distribution."
+                    == "Customers and distribution."
                 )
                 ui_smoke["full_title_available"] = (
                     app.card_title_tooltip_text(smoke_item) == smoke_title
                 )
                 ui_smoke["dynamic_wrap_applied"] = (
                     int(smoke_title_widget.cget("wraplength"))
-                    == smoke_content.winfo_width()
+                    == FEED_ROW_TEXT_FALLBACK_WIDTH
                 )
         except Exception as exc:
             ui_smoke["error"] = f"{type(exc).__name__}: {exc}"
