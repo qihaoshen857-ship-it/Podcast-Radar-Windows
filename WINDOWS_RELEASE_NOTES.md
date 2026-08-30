@@ -1,17 +1,20 @@
-# Podcast Radar for Windows v0.4.43
+# Podcast Radar for Windows v0.4.44
 
-这是 Podcast Radar 的 Windows 11 启动兼容性紧急修复版。Mac 版本不受影响。
+这是 Podcast Radar 的 Windows 节目卡片排版修复版。即使没有配置标题翻译 API，长英文标题也能稳定显示。
 
-## 本次修复
+## 本次优化
 
-- 修复启动阶段 `_tkinter.TclError: bad cursor spec "pointinghand"`，全部可点击控件统一使用 Windows/Tk 支持的 `hand2` cursor。
-- Windows CI 在静默安装后运行实际 EXE，完整初始化 Tk 与主界面、执行 `update_idletasks`，再安全退出。
-- 发布自检文件同时记录运行时依赖、Tk UI 初始化和安全退出结果。
+- 未翻译的英文标题最多显示两行，超出部分使用省略号，不再挤进简介区域。
+- 已翻译节目采用“中文主标题 + 一行浅灰英文原题”，保留原始语义线索。
+- 自动删除 RSS 简介开头重复出现的节目标题，避免视觉上像两行标题叠在一起。
+- 卡片高度和标题间距重新分配，并根据窗口实际宽度动态计算折行。
+- 鼠标停留在标题上可查看完整中文标题和英文原题。
+- 保留 v0.4.43 的 Windows 11 cursor 启动修复与安装后真实 UI 自检。
 
 ## 下载选择
 
-- `PodcastRadar-Setup-0.4.43-x64.exe`：推荐安装包。
-- `PodcastRadar-Portable-0.4.43-x64.zip`：免安装版，完整解压后运行。
+- `PodcastRadar-Setup-0.4.44-x64.exe`：推荐安装包。
+- `PodcastRadar-Portable-0.4.44-x64.zip`：免安装版，完整解压后运行。
 - `SHA256SUMS.txt`：下载后校验文件完整性。
 
 ## 主要功能

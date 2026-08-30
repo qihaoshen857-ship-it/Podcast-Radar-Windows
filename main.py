@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 import hashlib
+import unicodedata
 import webbrowser
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,7 +24,8 @@ from difflib import SequenceMatcher
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
+from typing import Callable
 from urllib.parse import unquote, urlparse
 import tkinter as tk
 from xml.etree import ElementTree as ET
@@ -79,7 +81,7 @@ from app.transcription import (
 
 
 APP_NAME = "Podcast Radar"
-APP_VERSION = "0.4.43"
+APP_VERSION = "0.4.44"
 CLICKABLE_CURSOR = "hand2"
 TRANSCRIPTION_MODE_OPTIONS = {
     "本地优先": "local_first",
@@ -373,8 +375,9 @@ CARD_HEIGHT = 376
 CARD_INNER_WIDTH = 174
 CARD_INNER_HEIGHT = 354
 CARD_COVER_SIZE = 164
-FEED_ROW_HEIGHT = 110
+FEED_ROW_HEIGHT = 128
 FEED_ROW_COVER_SIZE = 72
+FEED_ROW_TEXT_FALLBACK_WIDTH = 430
 DETAIL_COVER_SIZE = 138
 CARD_GAP_X = 26
 CARD_GAP_Y = 30
@@ -2472,6 +2475,81 @@ class RoundedDinoProgressBar(tk.Canvas):
             )
 
 
+class HoverTooltip:
+    """Small cross-platform tooltip used for full, unclipped episode titles."""
+
+    def __init__(self, widget: tk.Widget, text_provider: Callable[[], str], delay_ms: int = 450):
+        self.widget = widget
+        self.text_provider = text_provider
+        self.delay_ms = delay_ms
+        self.after_id: str | None = None
+        self.window: tk.Toplevel | None = None
+        widget.bind("<Enter>", self.schedule, add="+")
+        widget.bind("<Leave>", self.hide, add="+")
+        widget.bind("<ButtonPress>", self.hide, add="+")
+        widget.bind("<Destroy>", self.hide, add="+")
+
+    def schedule(self, _event: tk.Event | None = None) -> None:
+        self.cancel()
+        try:
+            self.after_id = self.widget.after(self.delay_ms, self.show)
+        except tk.TclError:
+            self.after_id = None
+
+    def cancel(self) -> None:
+        if self.after_id is None:
+            return
+        try:
+            self.widget.after_cancel(self.after_id)
+        except tk.TclError:
+            pass
+        self.after_id = None
+
+    def show(self) -> None:
+        self.after_id = None
+        if self.window is not None:
+            return
+        try:
+            text = self.text_provider().strip()
+        except Exception:
+            text = ""
+        if not text:
+            return
+        try:
+            x = self.widget.winfo_rootx() + 12
+            y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+            window = tk.Toplevel(self.widget)
+            window.wm_overrideredirect(True)
+            window.wm_geometry(f"+{x}+{y}")
+            tk.Label(
+                window,
+                text=text,
+                justify="left",
+                anchor="w",
+                wraplength=520,
+                bg="#1d1d1f",
+                fg="#ffffff",
+                font=(FONT_UI, 9),
+                padx=10,
+                pady=7,
+                relief="solid",
+                borderwidth=1,
+            ).pack()
+            self.window = window
+        except tk.TclError:
+            self.window = None
+
+    def hide(self, _event: tk.Event | None = None) -> None:
+        self.cancel()
+        if self.window is None:
+            return
+        try:
+            self.window.destroy()
+        except tk.TclError:
+            pass
+        self.window = None
+
+
 class YTAudioDownloaderApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -3740,6 +3818,9 @@ class YTAudioDownloaderApp:
 
         content = tk.Frame(row_inner, bg=bg)
         content.grid(row=0, column=1, sticky="nsew")
+        title_font = tkfont.Font(root=self.root, family=FONT_UI, size=12, weight="bold")
+        original_title_font = tkfont.Font(root=self.root, family=FONT_UI, size=9)
+        summary_font = tkfont.Font(root=self.root, family=FONT_UI, size=10)
         title = tk.Label(
             content,
             text=self.card_display_title(item),
@@ -3747,11 +3828,26 @@ class YTAudioDownloaderApp:
             bg=bg,
             justify="left",
             anchor="w",
-            wraplength=430,
-            font=(FONT_UI, 12, "bold"),
-            height=1,
+            wraplength=FEED_ROW_TEXT_FALLBACK_WIDTH,
+            font=title_font,
+            height=2,
         )
         title.pack(fill="x")
+        title._font_ref = title_font
+        original_title = tk.Label(
+            content,
+            text=self.card_original_title_text(item),
+            fg=COLOR_MUTED,
+            bg=bg,
+            justify="left",
+            anchor="w",
+            wraplength=FEED_ROW_TEXT_FALLBACK_WIDTH,
+            font=original_title_font,
+            height=1,
+        )
+        original_title._font_ref = original_title_font
+        if self.card_original_title_text(item):
+            original_title.pack(fill="x", pady=(1, 0), after=title)
         summary = tk.Label(
             content,
             text=self.card_summary_text(item),
@@ -3759,11 +3855,12 @@ class YTAudioDownloaderApp:
             bg=bg,
             justify="left",
             anchor="nw",
-            wraplength=430,
-            font=(FONT_UI, 10),
+            wraplength=FEED_ROW_TEXT_FALLBACK_WIDTH,
+            font=summary_font,
             height=1,
         )
         summary.pack(fill="x", pady=(3, 0))
+        summary._font_ref = summary_font
         meta_line = tk.Frame(content, bg=bg)
         meta_line.pack(fill="x", pady=(3, 0))
         meta = tk.Label(
@@ -3841,6 +3938,7 @@ class YTAudioDownloaderApp:
             "meta_line": meta_line,
             "right": right,
             "title": title,
+            "original_title": original_title,
             "summary": summary,
             "meta": meta,
             "published": published,
@@ -3849,7 +3947,15 @@ class YTAudioDownloaderApp:
             "status": status,
             "select_button": select_button,
         }
-        for widget in (row, row_inner, cover, content, title, summary, meta_line, meta, published, right, importance, status):
+        self.update_episode_row_text_layout(self.card_widgets[item.video_id], item, FEED_ROW_TEXT_FALLBACK_WIDTH, force=True)
+        content.bind(
+            "<Configure>",
+            lambda event, item_id=item.video_id: self.resize_episode_row_text(item_id, event.width),
+            add="+",
+        )
+        title._hover_tooltip = HoverTooltip(title, lambda item=item: self.card_title_tooltip_text(item))
+        original_title._hover_tooltip = HoverTooltip(original_title, lambda item=item: self.card_title_tooltip_text(item))
+        for widget in (row, row_inner, cover, content, title, original_title, summary, meta_line, meta, published, right, importance, status):
             self.bind_row_focus(widget, item.video_id)
         row.bind("<Double-Button-1>", lambda _event, item_id=item.video_id: self.show_episode_detail(item_id))
         return row
@@ -4977,7 +5083,7 @@ class YTAudioDownloaderApp:
         focused = video_id == self.focused_item_id
         bg = COLOR_CARD_SELECTED if selected else COLOR_CARD
         border = COLOR_BLUE if focused else (COLOR_PURPLE if selected else COLOR_BORDER)
-        for key in ("row_inner", "cover", "content", "meta_line", "right", "title", "summary", "meta", "published", "importance", "status"):
+        for key in ("row_inner", "cover", "content", "meta_line", "right", "title", "original_title", "summary", "meta", "published", "importance", "status"):
             widget = widgets.get(key)
             if isinstance(widget, tk.Widget):
                 try:
@@ -4999,8 +5105,7 @@ class YTAudioDownloaderApp:
             except tk.TclError:
                 pass
         try:
-            widgets["title"].configure(text=self.card_display_title(item))
-            widgets["summary"].configure(text=self.card_summary_text(item))
+            self.update_episode_row_text_layout(widgets, item, force=True)
             widgets["meta"].configure(text=self.card_meta_text(item))
             widgets["published"].configure(text=self.card_published_text(item))
             widgets["importance"].configure(
@@ -5025,6 +5130,78 @@ class YTAudioDownloaderApp:
             pass
         if focused:
             self.render_inline_detail(item)
+
+    def resize_episode_row_text(self, video_id: str, available_width: int) -> None:
+        widgets = self.card_widgets.get(video_id)
+        item = self.video_map.get(video_id)
+        if not widgets or item is None:
+            return
+        self.update_episode_row_text_layout(widgets, item, available_width)
+
+    def update_episode_row_text_layout(
+        self,
+        widgets: dict[str, tk.Widget],
+        item: VideoItem,
+        available_width: int | None = None,
+        *,
+        force: bool = False,
+    ) -> None:
+        content = widgets.get("content")
+        title = widgets.get("title")
+        original_title = widgets.get("original_title")
+        summary = widgets.get("summary")
+        if not all(isinstance(widget, tk.Widget) for widget in (content, title, original_title, summary)):
+            return
+
+        if available_width is None:
+            try:
+                available_width = content.winfo_width()
+            except tk.TclError:
+                available_width = FEED_ROW_TEXT_FALLBACK_WIDTH
+        wrap_width = max(150, int(available_width or FEED_ROW_TEXT_FALLBACK_WIDTH))
+        previous_width = getattr(content, "_episode_text_wrap_width", None)
+        if not force and previous_width is not None and abs(previous_width - wrap_width) < 4:
+            return
+        content._episode_text_wrap_width = wrap_width
+
+        translated_title = self.card_translated_title(item)
+        primary_title = translated_title or item.title
+        original_text = self.card_original_title_text(item)
+        primary_lines = 1 if original_text else 2
+        title_font = getattr(title, "_font_ref", None)
+        original_font = getattr(original_title, "_font_ref", None)
+        summary_font = getattr(summary, "_font_ref", None)
+        if not isinstance(title_font, tkfont.Font):
+            title_font = tkfont.Font(root=self.root, family=FONT_UI, size=12, weight="bold")
+            title._font_ref = title_font
+        if not isinstance(original_font, tkfont.Font):
+            original_font = tkfont.Font(root=self.root, family=FONT_UI, size=9)
+            original_title._font_ref = original_font
+        if not isinstance(summary_font, tkfont.Font):
+            summary_font = tkfont.Font(root=self.root, family=FONT_UI, size=10)
+            summary._font_ref = summary_font
+
+        title.configure(
+            text=ellipsize_wrapped_text(primary_title, wrap_width, primary_lines, title_font.measure),
+            wraplength=wrap_width,
+            height=primary_lines,
+        )
+        if original_text:
+            original_title.configure(
+                text=ellipsize_wrapped_text(original_text, wrap_width, 1, original_font.measure),
+                wraplength=wrap_width,
+            )
+            if not original_title.winfo_manager():
+                original_title.pack(fill="x", pady=(1, 0), after=title)
+        else:
+            original_title.configure(text="", wraplength=wrap_width)
+            if original_title.winfo_manager():
+                original_title.pack_forget()
+
+        summary.configure(
+            text=ellipsize_wrapped_text(self.card_summary_text(item), wrap_width, 1, summary_font.measure),
+            wraplength=wrap_width,
+        )
 
     def card_status_text(self, item: VideoItem) -> str:
         selected_prefix = "✅ 已选 · " if item.video_id in self.selected_item_ids else ""
@@ -5065,9 +5242,12 @@ class YTAudioDownloaderApp:
     def card_summary_text(self, item: VideoItem) -> str:
         translated = self.card_translated_summary(item)
         if translated:
-            return translated
+            cleaned_translation = strip_repeated_title_prefix(translated, self.card_display_title(item))
+            cleaned_translation = strip_repeated_title_prefix(cleaned_translation, item.title)
+            return clamp_text(cleaned_translation, 72) if cleaned_translation else "暂无独立简介"
         if item.description_text:
-            return clamp_text(strip_html_text(item.description_text), 72)
+            cleaned_description = strip_repeated_title_prefix(item.description_text, item.title)
+            return clamp_text(cleaned_description, 72) if cleaned_description else "暂无独立简介"
         return "暂无简介"
 
     def card_digest_preview_text(self, item: VideoItem) -> str:
@@ -5110,6 +5290,12 @@ class YTAudioDownloaderApp:
         if translated and translated.strip() != item.title.strip():
             return item.title
         return ""
+
+    def card_title_tooltip_text(self, item: VideoItem) -> str:
+        translated = self.card_translated_title(item)
+        if translated and translated.strip() != item.title.strip():
+            return f"{translated}\n英文原题：{item.title}"
+        return item.title
 
     def card_translated_title(self, item: VideoItem) -> str:
         record = self.research_library.get("items", {}).get(item.video_id, {})
@@ -10715,6 +10901,112 @@ def clamp_text(value: str, max_chars: int) -> str:
     return compact[: max(0, max_chars - 1)].rstrip(" ，。；、") + "…"
 
 
+def canonical_episode_text(value: str) -> str:
+    """Normalize title-like text for duplicate-prefix comparisons."""
+    normalized = unicodedata.normalize("NFKC", strip_html_text(value or "")).casefold()
+    return "".join(character for character in normalized if character.isalnum())
+
+
+def strip_repeated_title_prefix(description: str, title: str) -> str:
+    """Remove an RSS summary prefix that merely repeats the episode title."""
+    compact_description = re.sub(r"\s+", " ", strip_html_text(description or "")).strip()
+    compact_title = re.sub(r"\s+", " ", strip_html_text(title or "")).strip()
+    canonical_title = canonical_episode_text(compact_title)
+    canonical_description = canonical_episode_text(compact_description)
+    if not compact_description or not canonical_title:
+        return compact_description
+    if not canonical_description.startswith(canonical_title):
+        return compact_description
+
+    consumed = 0
+    cutoff = 0
+    for index, character in enumerate(unicodedata.normalize("NFKC", compact_description)):
+        if character.isalnum():
+            consumed += len(character.casefold())
+        cutoff = index + 1
+        if consumed >= len(canonical_title):
+            break
+    raw_remainder = compact_description[cutoff:]
+    if raw_remainder and raw_remainder[0].isalnum():
+        return compact_description
+    remainder = raw_remainder.lstrip(" \t\r\n:：;；,.，。!?！？|｜·-–—_+/\\()[]{}<>《》")
+    return remainder
+
+
+def text_fits_wrapped_lines(
+    value: str,
+    max_width: int,
+    max_lines: int,
+    measure: Callable[[str], int],
+) -> bool:
+    if not value:
+        return True
+    if max_width <= 0 or max_lines <= 0:
+        return False
+    line_count = 1
+    current_line = ""
+    pending_space = ""
+    for token in re.findall(r"\n|[^\S\n]+|[^\s]+", value):
+        if token == "\n":
+            line_count += 1
+            current_line = ""
+            pending_space = ""
+        elif token.isspace():
+            pending_space = " "
+            continue
+        else:
+            candidate = current_line + (pending_space if current_line else "") + token
+            pending_space = ""
+            if current_line and measure(candidate) > max_width:
+                line_count += 1
+                current_line = token
+            else:
+                current_line = candidate
+
+            while current_line and measure(current_line) > max_width:
+                low = 0
+                high = len(current_line)
+                while low < high:
+                    middle = (low + high + 1) // 2
+                    if measure(current_line[:middle]) <= max_width:
+                        low = middle
+                    else:
+                        high = middle - 1
+                cutoff = max(1, low)
+                remainder = current_line[cutoff:].lstrip()
+                if not remainder:
+                    break
+                line_count += 1
+                current_line = remainder
+        if line_count > max_lines:
+            return False
+    return True
+
+
+def ellipsize_wrapped_text(
+    value: str,
+    max_width: int,
+    max_lines: int,
+    measure: Callable[[str], int],
+) -> str:
+    """Fit a title to a known number of Tk lines and add a visible ellipsis."""
+    compact = re.sub(r"\s+", " ", strip_html_text(value or "")).strip()
+    if not compact or text_fits_wrapped_lines(compact, max_width, max_lines, measure):
+        return compact
+
+    low = 0
+    high = len(compact)
+    while low < high:
+        middle = (low + high + 1) // 2
+        candidate = compact[:middle].rstrip() + "…"
+        if text_fits_wrapped_lines(candidate, max_width, max_lines, measure):
+            low = middle
+        else:
+            high = middle - 1
+    prefix = compact[:low].rstrip(" ,.;:，。；：、-–—")
+    return (prefix + "…") if prefix else "…"
+
+
 def clean_ui_status(value: str, max_chars: int = 48) -> str:
     cleaned = strip_html_text(value or "")
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
@@ -11456,6 +11748,12 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
         "tk_initialized": False,
         "app_initialized": False,
         "update_idletasks_completed": False,
+        "long_title_card_rendered": False,
+        "title_has_visible_ellipsis": False,
+        "title_summary_do_not_overlap": False,
+        "duplicate_summary_removed": False,
+        "full_title_available": False,
+        "dynamic_wrap_applied": False,
         "safe_exit_completed": False,
         "error": "",
     }
@@ -11470,10 +11768,56 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 style.theme_use("clam")
             except Exception:
                 pass
-            YTAudioDownloaderApp(root)
+            app = YTAudioDownloaderApp(root)
             ui_smoke["app_initialized"] = True
             root.update_idletasks()
+            smoke_title = (
+                "How Founders Can Build and Distribute Useful Artificial Intelligence Products "
+                "Without Raising Venture Capital While Building a Durable Global Company "
+                "and Serving Customers Across Multiple Industries"
+            )
+            smoke_item = VideoItem(
+                video_id="windows-long-title-layout-smoke",
+                title=smoke_title,
+                duration_text="42:00",
+                webpage_url="https://example.com/windows-layout-smoke",
+                source_name="No Priors",
+                description_text=(
+                    f"{smoke_title} — A practical conversation about customers and distribution."
+                ),
+            )
+            app.video_items = [smoke_item]
+            app.video_map = {smoke_item.video_id: smoke_item}
+            app.current_topic = "ai"
+            app.render_cards()
+            root.update_idletasks()
             ui_smoke["update_idletasks_completed"] = True
+            smoke_widgets = app.card_widgets.get(smoke_item.video_id, {})
+            smoke_content = smoke_widgets.get("content")
+            smoke_title_widget = smoke_widgets.get("title")
+            smoke_summary_widget = smoke_widgets.get("summary")
+            ui_smoke["long_title_card_rendered"] = all(
+                isinstance(widget, tk.Widget)
+                for widget in (smoke_content, smoke_title_widget, smoke_summary_widget)
+            )
+            if ui_smoke["long_title_card_rendered"]:
+                ui_smoke["title_has_visible_ellipsis"] = str(
+                    smoke_title_widget.cget("text")
+                ).endswith("…")
+                title_bottom = smoke_title_widget.winfo_y() + smoke_title_widget.winfo_height()
+                summary_top = smoke_summary_widget.winfo_y()
+                ui_smoke["title_summary_do_not_overlap"] = title_bottom <= summary_top
+                ui_smoke["duplicate_summary_removed"] = (
+                    smoke_summary_widget.cget("text")
+                    == "A practical conversation about customers and distribution."
+                )
+                ui_smoke["full_title_available"] = (
+                    app.card_title_tooltip_text(smoke_item) == smoke_title
+                )
+                ui_smoke["dynamic_wrap_applied"] = (
+                    int(smoke_title_widget.cget("wraplength"))
+                    == smoke_content.winfo_width()
+                )
         except Exception as exc:
             ui_smoke["error"] = f"{type(exc).__name__}: {exc}"
         finally:
@@ -11490,6 +11834,12 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 "tk_initialized",
                 "app_initialized",
                 "update_idletasks_completed",
+                "long_title_card_rendered",
+                "title_has_visible_ellipsis",
+                "title_summary_do_not_overlap",
+                "duplicate_summary_removed",
+                "full_title_available",
+                "dynamic_wrap_applied",
                 "safe_exit_completed",
             )
         ) and not ui_smoke["error"]

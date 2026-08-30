@@ -1,5 +1,5 @@
 #define MyAppName "Podcast Radar"
-#define MyAppVersion "0.4.43"
+#define MyAppVersion "0.4.44"
 #define MyAppExeName "Podcast Radar.exe"
 
 [Setup]
