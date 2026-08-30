@@ -48,9 +48,10 @@ jobs:
             $AppProcess.Kill()
             throw "Frozen UI self-check timed out after 120 seconds."
           }
-          if ($AppProcess.ExitCode -ne 0) { throw "Frozen UI self-check failed with exit code $($AppProcess.ExitCode)" }
+          if (-not (Test-Path $SelfCheck)) { throw "Frozen UI self-check did not write its result file." }
           $Result = Get-Content $SelfCheck -Raw | ConvertFrom-Json
           $Result | ConvertTo-Json -Depth 5
+          if ($AppProcess.ExitCode -ne 0) { throw "Frozen UI self-check failed with exit code $($AppProcess.ExitCode)" }
           if (-not $Result.ok) { throw "Frozen self-check did not pass." }
           if (-not $Result.checks.tk_ui_smoke) { throw "Tk UI smoke check did not pass." }
           if (-not $Result.ui_smoke.update_idletasks_completed) { throw "Tk update_idletasks was not completed." }

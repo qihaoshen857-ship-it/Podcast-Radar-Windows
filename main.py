@@ -11774,7 +11774,9 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
             smoke_title = (
                 "How Founders Can Build and Distribute Useful Artificial Intelligence Products "
                 "Without Raising Venture Capital While Building a Durable Global Company "
-                "and Serving Customers Across Multiple Industries"
+                "and Serving Customers Across Multiple Industries: A Complete Discussion of "
+                "Product Strategy, Engineering, Distribution, Pricing, Customer Support, "
+                "International Expansion, and Long-Term Competitive Advantage"
             )
             smoke_item = VideoItem(
                 video_id="windows-long-title-layout-smoke",
