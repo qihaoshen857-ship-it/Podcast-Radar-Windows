@@ -1,5 +1,29 @@
 """Real Tk layout checks, also run inside the installed Windows executable."""
 from __future__ import annotations
+import time
+
+
+def settle_visible_window(root, width: int, height: int, *, timeout: float = 5.0) -> None:
+    """Dispatch native mapping/configure events before measuring a Windows HWND.
+
+    update_idletasks alone does not deliver the window manager events produced
+    by deiconify on Windows. A withdrawn root can otherwise report 1x1 children.
+    Keep a deadline and fail rather than accepting unmeasured geometry.
+    """
+    root.deiconify()
+    root.geometry(f"{width}x{height}")
+    deadline = time.monotonic() + timeout
+    while True:
+        root.update()
+        root.update_idletasks()
+        if root.winfo_ismapped() and root.winfo_width() == width and root.winfo_height() == height:
+            return
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Window did not map at {width}x{height}: "
+                f"mapped={root.winfo_ismapped()}, actual={root.winfo_width()}x{root.winfo_height()}"
+            )
+        time.sleep(0.01)
 
 
 def exercise_embodied_ui(app, api) -> dict:
@@ -21,9 +45,9 @@ def exercise_embodied_ui(app, api) -> dict:
     app.render_cards()
     sizes = []
     for width, height in ((1080, 720), (1280, 820)):
-        root.geometry(f"{width}x{height}")
-        root.update_idletasks()
+        settle_visible_window(root, width, height)
         app.layout_topic_header()
+        root.update()
         root.update_idletasks()
         ordered = [app.topic_filter_buttons[key] for key in api.TOPIC_FILTER_LABELS]
         rects = [(w.winfo_rootx(), w.winfo_rooty(), w.winfo_width(), w.winfo_height()) for w in ordered]
@@ -40,6 +64,7 @@ def exercise_embodied_ui(app, api) -> dict:
         button = app.topic_filter_buttons[topic]
         assert button.itemcget(button.find_all()[0], "fill") == api.COLOR_TEXT
         sizes.append({"width": width, "height": height, "buttons_visible": True, "no_overlap": True,
+                      "actual_width": root.winfo_width(), "actual_height": root.winfo_height(),
                       "filter_row": int(filters.grid_info()["row"])})
     app.begin_feed_refresh(topic, showing_cache=False)
     root.update_idletasks()

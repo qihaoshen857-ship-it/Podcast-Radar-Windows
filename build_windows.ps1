@@ -12,6 +12,12 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not $SkipTests) {
     & $Python -m pytest -q
     if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
+    $SourceCheck = Join-Path $env:TEMP "podcast-radar-source-ui-check.json"
+    & $Python main.py --ui-smoke-check $SourceCheck
+    if ($LASTEXITCODE -ne 0) {
+        if (Test-Path $SourceCheck) { Get-Content $SourceCheck }
+        throw "Source UI smoke check failed with exit code $LASTEXITCODE"
+    }
 }
 
 & $Python (Join-Path $Root "tools\generate_windows_icon.py")

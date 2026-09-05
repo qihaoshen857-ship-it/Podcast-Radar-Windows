@@ -2612,7 +2612,7 @@ class HoverTooltip:
 
 
 class YTAudioDownloaderApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, *, schedule_startup: bool = True):
         self.root = root
         self.root.title(f"{APP_NAME} v{APP_VERSION}")
         self.root.geometry("1280x820")
@@ -2752,9 +2752,10 @@ class YTAudioDownloaderApp:
         self.prefill_initial_cached_radar()
         self.build_ui()
         self.root.protocol("WM_DELETE_WINDOW", self.on_app_close)
-        self.root.after(120, self.process_events)
-        self.root.after(260, self.maybe_show_first_run_api_setup)
-        self.root.after(AUTO_FETCH_DELAY_MS, self.start_initial_fetch_when_ready)
+        if schedule_startup:
+            self.root.after(120, self.process_events)
+            self.root.after(260, self.maybe_show_first_run_api_setup)
+            self.root.after(AUTO_FETCH_DELAY_MS, self.start_initial_fetch_when_ready)
 
     def load_settings(self) -> None:
         settings = {}
@@ -12409,7 +12410,7 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                 style.theme_use("clam")
             except Exception:
                 pass
-            app = YTAudioDownloaderApp(root)
+            app = YTAudioDownloaderApp(root, schedule_startup=False)
             ui_smoke["app_initialized"] = True
             root.update_idletasks()
             smoke_title = (
