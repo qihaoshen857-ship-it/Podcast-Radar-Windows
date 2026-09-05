@@ -54,6 +54,10 @@ except Exception:  # noqa: BLE001
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
+from app.embodied_intelligence import (
+    TOPIC as EMBODIED_TOPIC, YOUTUBE_SOURCES as EMBODIED_YOUTUBE_SOURCES,
+    is_embodied_item, score_embodied_item,
+)
 from app.edge_cookie_export import export_edge_cookies
 from app.person_monitor_module import PersonMonitorPage
 from app.person_monitor_service import module_resources_dir
@@ -83,7 +87,7 @@ from app.transcription import (
 
 
 APP_NAME = "Podcast Radar"
-APP_VERSION = "0.4.44"
+APP_VERSION = "0.4.45"
 CLICKABLE_CURSOR = "hand2"
 TRANSCRIPTION_MODE_OPTIONS = {
     "本地优先": "local_first",
@@ -1020,7 +1024,7 @@ DEFAULT_AI_PODCAST_FEEDS: tuple[PodcastFeed, ...] = (
     PodcastFeed("Practical AI", "https://feeds.transistor.fm/practical-ai-machine-learning-data-science-llm", "Practical AI LLC", 3),
     PodcastFeed("Eye On A.I.", "https://rss.libsyn.com/shows/123267/destinations/727317.xml", "Craig S. Smith", 4),
     PodcastFeed("The AI Daily Brief: Artificial Intelligence News and Analysis", "https://anchor.fm/s/f7cac464/podcast/rss", "Nathaniel Whittemore", 5),
-    PodcastFeed("Dwarkesh Podcast", "https://apple.dwarkesh-podcast.workers.dev/feed.rss", "Dwarkesh Patel", 6),
+    PodcastFeed("Dwarkesh Podcast", "https://api.substack.com/feed/podcast/69345.rss", "Dwarkesh Patel", 6),
     PodcastFeed("Hard Fork", "https://feeds.simplecast.com/6HKOhNgS", "The New York Times", 7),
 )
 
@@ -1142,7 +1146,21 @@ SCIENCE_WELLNESS_FEED_NAMES = {
     + DEFAULT_SCIENCE_WELLNESS_XIAOYUZHOU_FEEDS
 }
 
+DEFAULT_EMBODIED_PODCAST_FEEDS = tuple(
+    feed for feed in DEFAULT_AI_PODCAST_FEEDS
+    if any(name in feed.name for name in ("No Priors", "Cognitive Revolution", "Dwarkesh"))
+)
+DEFAULT_EMBODIED_YOUTUBE_FEEDS = tuple(
+    YouTubeFeed(f"YouTube | {name}", channel_id, name, priority, url, EMBODIED_TOPIC)
+    for priority, (name, channel_id, url) in enumerate(EMBODIED_YOUTUBE_SOURCES)
+)
+DEFAULT_EMBODIED_XIAOYUZHOU_FEEDS = tuple(
+    XiaoyuzhouFeed(feed.name, feed.podcast_url, feed.source, feed.priority, EMBODIED_TOPIC)
+    for feed in DEFAULT_AI_STARTUP_XIAOYUZHOU_FEEDS
+)
+
 PODCAST_FEED_GROUPS: dict[str, tuple[PodcastFeed, ...]] = {
+    EMBODIED_TOPIC: DEFAULT_EMBODIED_PODCAST_FEEDS,
     "ai": DEFAULT_AI_PODCAST_FEEDS,
     "ai_startup": DEFAULT_AI_STARTUP_PODCAST_FEEDS,
     "weather_agri": DEFAULT_WEATHER_AGRI_PODCAST_FEEDS,
@@ -1155,13 +1173,15 @@ PODCAST_FEED_GROUPS: dict[str, tuple[PodcastFeed, ...]] = {
     ),
 }
 YOUTUBE_FEED_GROUPS: dict[str, tuple[YouTubeFeed, ...]] = {
+    EMBODIED_TOPIC: DEFAULT_EMBODIED_YOUTUBE_FEEDS,
     "ai": DEFAULT_AI_YOUTUBE_FEEDS,
     "ai_startup": (),
     "weather_agri": (),
     "science_wellness": DEFAULT_SCIENCE_WELLNESS_YOUTUBE_FEEDS,
-    "all": DEFAULT_AI_YOUTUBE_FEEDS + DEFAULT_SCIENCE_WELLNESS_YOUTUBE_FEEDS,
+    "all": DEFAULT_AI_YOUTUBE_FEEDS + DEFAULT_EMBODIED_YOUTUBE_FEEDS + DEFAULT_SCIENCE_WELLNESS_YOUTUBE_FEEDS,
 }
 XIAOYUZHOU_FEED_GROUPS: dict[str, tuple[XiaoyuzhouFeed, ...]] = {
+    EMBODIED_TOPIC: DEFAULT_EMBODIED_XIAOYUZHOU_FEEDS,
     "ai": DEFAULT_AI_XIAOYUZHOU_FEEDS,
     "ai_startup": DEFAULT_AI_STARTUP_XIAOYUZHOU_FEEDS,
     "weather_agri": (),
@@ -1173,6 +1193,7 @@ XIAOYUZHOU_FEED_GROUPS: dict[str, tuple[XiaoyuzhouFeed, ...]] = {
     ),
 }
 PODCAST_GROUP_LABELS = {
+    EMBODIED_TOPIC: "具身智能",
     "ai": "AI 播客",
     "ai_startup": "AI创业",
     "weather_agri": "天气农业",
@@ -1183,6 +1204,7 @@ TOPIC_FILTER_LABELS = {
     "all": "综合",
     "ai": "AI",
     "ai_startup": "AI创业",
+    EMBODIED_TOPIC: "机器人",
     "weather_agri": "天气",
     "science_wellness": "养生",
 }
@@ -1194,6 +1216,8 @@ def topic_filter_variant(button_topic: str, current_topic: str) -> str:
 
 
 def topic_display_label(topic: str) -> str:
+    if topic == EMBODIED_TOPIC:
+        return "具身智能"
     if topic == "manual":
         return "手动链接"
     if topic == "favorites":
@@ -1472,6 +1496,8 @@ def is_ai_startup_story_item(title: str, description: str = "", source_name: str
 
 
 def infer_item_topic(item: VideoItem) -> str:
+    if is_embodied_item(item.title, item.description_text, item.source_name):
+        return EMBODIED_TOPIC
     if item.source_name in AI_STARTUP_FEED_NAMES:
         return "ai_startup"
     if item.source_name in AI_FEED_NAMES:
@@ -1502,6 +1528,9 @@ def play_count_component(play_count: int | None) -> float:
 
 def investment_value_score(item: VideoItem) -> tuple[float, list[str]]:
     topic = infer_item_topic(item)
+    if topic == EMBODIED_TOPIC:
+        return score_embodied_item(item.title, item.description_text, item.source_name,
+                                   item.published_text, duration_minutes(item.duration_text))
     score = {
         "ai": 5.4,
         "ai_startup": 5.2,
@@ -1562,14 +1591,14 @@ def investment_value_score(item: VideoItem) -> tuple[float, list[str]]:
 def update_item_importance_score(item: VideoItem) -> None:
     investment_score, reasons = investment_value_score(item)
     heat_score = play_count_component(item.play_count)
-    if item.play_count is None:
+    if item.play_count is None or infer_item_topic(item) == EMBODIED_TOPIC:
         total = investment_score
     else:
         total = heat_score * 0.42 + investment_score * 0.58
     item.investment_score = round(investment_score, 1)
     item.importance_score = round(max(0.0, min(10.0, total)), 1)
     play_reason = f"播放量 {format_count(item.play_count)}" if item.play_count is not None else "播放量未知"
-    reason_text = " / ".join([play_reason, f"投资价值 {item.investment_score:.1f}", *reasons[:4]])
+    reason_text = " / ".join([play_reason, f"投资价值 {item.investment_score:.1f}", *reasons])
     item.importance_reason = reason_text[:160]
     item.scored_at = datetime.now(timezone.utc).isoformat()
 
@@ -3632,27 +3661,35 @@ class YTAudioDownloaderApp:
                 self.schedule_visible_page_flush(delay_ms=12)
 
     def build_download_page(self, parent: tk.Frame) -> None:
-        player = tk.Frame(parent, bg=COLOR_BG, height=52)
+        player = tk.Frame(parent, bg=COLOR_BG, padx=32)
         player.pack(fill="x")
-        player.pack_propagate(False)
+        player.columnconfigure(0, weight=1)
+        heading = tk.Frame(player, bg=COLOR_BG)
+        heading.grid(row=0, column=0, sticky="w")
+        filters = tk.Frame(player, bg=COLOR_BG)
+        filters.grid(row=0, column=1, sticky="e")
+        self.topic_header = player
+        self.topic_heading = heading
+        self.topic_filters = filters
         tk.Label(
-            player,
+            heading,
             textvariable=self.download_title_var,
             fg=COLOR_TEXT,
             bg=COLOR_BG,
             font=(FONT_DISPLAY, 22, "bold"),
-        ).pack(side="left", padx=32)
-        self.ui_label(player, textvariable=self.selected_count_var, fg=COLOR_MUTED, bg=COLOR_BG).pack(side="left", padx=(0, 12))
+        ).pack(side="left", pady=9)
+        self.ui_label(heading, textvariable=self.selected_count_var, fg=COLOR_MUTED, bg=COLOR_BG).pack(side="left", padx=(16, 12))
         topic_buttons = [
-            ("science_wellness", self.fetch_science_wellness_updates, 13, (5, 26)),
+            ("science_wellness", self.fetch_science_wellness_updates, 13, (5, 0)),
             ("weather_agri", self.fetch_weather_agri_updates, 13, 5),
+            (EMBODIED_TOPIC, self.fetch_embodied_updates, 13, 5),
             ("ai_startup", self.fetch_ai_startup_updates, 13, 5),
             ("ai", self.fetch_ai_updates, 13, 5),
             ("all", self.fetch_all_updates, 15, 5),
         ]
         for topic, command, button_padx, pack_padx in topic_buttons:
             button = self.ui_button(
-                player,
+                filters,
                 TOPIC_FILTER_LABELS[topic],
                 command,
                 variant=topic_filter_variant(topic, self.current_topic),
@@ -3662,6 +3699,8 @@ class YTAudioDownloaderApp:
             )
             button.pack(side="right", padx=pack_padx, pady=9)
             self.topic_filter_buttons[topic] = button
+        player.bind("<Configure>", self.layout_topic_header, add="+")
+        heading.bind("<Configure>", self.layout_topic_header, add="+")
         self.update_topic_filter_buttons()
 
         body = tk.Frame(parent, bg=COLOR_BG, padx=32, pady=8)
@@ -4073,19 +4112,35 @@ class YTAudioDownloaderApp:
         if self.pending_artwork_ids or self.dirty_card_ids:
             self.schedule_visible_page_flush(delay_ms=12)
 
+    def layout_topic_header(self, _event=None) -> None:
+        header = self.topic_header
+        heading = self.topic_heading
+        filters = self.topic_filters
+        available = header.winfo_width() - 64
+        needs_two_rows = heading.winfo_reqwidth() + filters.winfo_reqwidth() + 16 > available
+        row = 1 if needs_two_rows else 0
+        if int(filters.grid_info().get("row", 0)) != row:
+            filters.grid_configure(row=row, column=0 if row else 1,
+                                   columnspan=2 if row else 1, sticky="e")
+
     def card_sections(self) -> list[tuple[str, str, list[VideoItem]]]:
         if self.current_topic == "favorites":
             return [("我的精选", "跨日期收藏，适合稍后下载、转录或阅读", self.video_items)]
+        if self.current_topic == EMBODIED_TOPIC:
+            return [("具身智能 / 人形机器人", "模型、本体、零部件、量产与真实应用", self.video_items)]
         if self.current_topic != "all":
             return [("", "", self.video_items)]
 
         ai_items: list[VideoItem] = []
         ai_startup_items: list[VideoItem] = []
+        embodied_items: list[VideoItem] = []
         weather_agri_items: list[VideoItem] = []
         science_wellness_items: list[VideoItem] = []
         other_items: list[VideoItem] = []
         for item in self.video_items:
-            if item.source_name in WEATHER_AGRI_FEED_NAMES:
+            if infer_item_topic(item) == EMBODIED_TOPIC:
+                embodied_items.append(item)
+            elif item.source_name in WEATHER_AGRI_FEED_NAMES:
                 weather_agri_items.append(item)
             elif item.source_name in AI_STARTUP_FEED_NAMES:
                 ai_startup_items.append(item)
@@ -4101,6 +4156,8 @@ class YTAudioDownloaderApp:
             sections.append(("AI 播客", "模型、算力、产品与产业动态", ai_items))
         if ai_startup_items:
             sections.append(("AI创业", "创始人故事、产品从 0 到 1、获客与商业化", ai_startup_items))
+        if embodied_items:
+            sections.append(("具身智能 / 人形机器人", "模型、本体、零部件、量产与真实应用", embodied_items))
         if weather_agri_items:
             sections.append(("天气农业", "ENSO、气候、作物与农产品市场", weather_agri_items))
         if science_wellness_items:
@@ -9299,6 +9356,9 @@ class YTAudioDownloaderApp:
     def fetch_ai_startup_updates(self) -> None:
         self.fetch_topic_updates("ai_startup")
 
+    def fetch_embodied_updates(self) -> None:
+        self.fetch_topic_updates(EMBODIED_TOPIC)
+
     def fetch_weather_agri_updates(self) -> None:
         self.fetch_topic_updates("weather_agri")
 
@@ -9321,7 +9381,7 @@ class YTAudioDownloaderApp:
         self.update_topic_filter_buttons()
         self.set_active_nav("download")
         cached_items = self.cached_podcast_items(topic)
-        if cached_items and not self.video_items:
+        if cached_items:
             self.apply_fetch_payload(
                 {
                     "source_title": f"{label}本地快照",
@@ -9334,10 +9394,11 @@ class YTAudioDownloaderApp:
                 persist_records=False,
             )
             self.current_task_var.set("当前任务：后台刷新最新节目")
-        elif cached_items:
-            self.set_status(f"已显示本地快照，正在后台刷新{label}最新节目...")
-            self.current_task_var.set("当前任务：后台刷新最新节目")
         else:
+            self.video_items = []
+            self.video_map = {}
+            self.selected_item_ids = set()
+            self.render_cards()
             self.summary_var.set(f"正在搜索{label}更新...")
         self.fetching = True
         self.begin_feed_refresh(topic, showing_cache=bool(cached_items))
@@ -9440,6 +9501,13 @@ class YTAudioDownloaderApp:
             return True
         if topic == "favorites":
             return bool(record.get("favorite"))
+        inferred = infer_item_topic(VideoItem(
+            video_id="", title=str(record.get("title") or ""), duration_text="-",
+            webpage_url="", source_name=str(record.get("source_name") or ""),
+            description_text=str(record.get("description_text") or ""),
+        ))
+        if topic == EMBODIED_TOPIC or inferred == EMBODIED_TOPIC:
+            return topic == inferred
         record_topic = str(record.get("topic") or "").strip()
         if record_topic == topic:
             return True
@@ -9471,8 +9539,7 @@ class YTAudioDownloaderApp:
         self.current_source_label = payload["source_title"]
         self.video_items = payload["items"]
         for item in self.video_items:
-            if not item.topic:
-                item.topic = self.current_topic
+            item.topic = infer_item_topic(item)
             update_item_importance_score(item)
         self.video_map = {item.video_id: item for item in self.video_items}
         if persist_records:
@@ -11277,6 +11344,11 @@ def fetch_podcast_updates(topic: str = "all") -> tuple[str, list[VideoItem], int
             added_from_feed = 0
             source_limit = source_episode_limit(feed)
             for published_at, item in rows:
+                item.topic = infer_item_topic(item)
+                if topic == EMBODIED_TOPIC and item.topic != EMBODIED_TOPIC:
+                    continue
+                if topic in {"ai", "ai_startup"} and item.topic == EMBODIED_TOPIC:
+                    continue
                 episode_key = item.audio_url or item.webpage_url or item.video_id
                 if episode_key in seen_episode_keys:
                     skipped += 1
@@ -11338,7 +11410,7 @@ def dedupe_episode_rows(rows: list[tuple[datetime | None, VideoItem]]) -> tuple[
 
 
 def episode_content_key(item: VideoItem) -> str:
-    title_key = normalize_search_text(item.title)
+    title_key = canonical_episode_text(item.title)
     if len(title_key) < 12:
         return item.audio_url or item.webpage_url or item.video_id
     date_key = item.published_text if re.match(r"\d{4}-\d{2}-\d{2}$", item.published_text or "") else ""
@@ -11618,7 +11690,7 @@ def compact_ffmpeg_error(stderr: str, max_chars: int = 260) -> str:
 
 def is_relevant_podcast_item(feed: PodcastFeed, title: str, description: str = "") -> bool:
     if feed.name in AI_STARTUP_FEED_NAMES:
-        return is_ai_startup_story_item(title, description, feed.name)
+        return is_embodied_item(title, description, feed.name) or is_ai_startup_story_item(title, description, feed.name)
     if feed.name not in WEATHER_AGRI_FEED_NAMES:
         return True
 
@@ -11708,6 +11780,9 @@ def fetch_youtube_feed_items(feed: YouTubeFeed) -> tuple[list[tuple[datetime | N
         published_at = parse_podcast_datetime(first_child_text(entry, "published") or first_child_text(entry, "updated"))
         date_prefix = published_at.astimezone().strftime("%Y-%m-%d") if published_at else "日期未知"
         description_text = youtube_media_text(entry, "description")
+        if feed.topic == EMBODIED_TOPIC and not is_embodied_item(title, description_text, feed.name):
+            skipped += 1
+            continue
         if feed.topic == "ai_startup" and not is_ai_startup_story_item(
             title,
             description_text,
@@ -11743,10 +11818,12 @@ def fetch_xiaoyuzhou_feed_items(feed: XiaoyuzhouFeed) -> tuple[list[tuple[dateti
     rows: list[tuple[datetime | None, VideoItem]] = []
     for item in items:
         item.source_name = feed.name
-        if feed.topic == "ai_startup" and not is_ai_startup_story_item(
-            item.title,
-            item.description_text,
-            feed.name,
+        if feed.topic == EMBODIED_TOPIC and not is_embodied_item(item.title, item.description_text, feed.name):
+            skipped += 1
+            continue
+        if feed.topic == "ai_startup" and not (
+            is_embodied_item(item.title, item.description_text, feed.name)
+            or is_ai_startup_story_item(item.title, item.description_text, feed.name)
         ):
             skipped += 1
             continue
@@ -12391,6 +12468,9 @@ def run_self_check(output_path: Path | None = None, *, check_ui: bool = False) -
                     int(smoke_title_widget.cget("wraplength"))
                     == FEED_ROW_TEXT_FALLBACK_WIDTH
                 )
+            from app.embodied_smoke import exercise_embodied_ui
+            ui_smoke["embodied"] = exercise_embodied_ui(app, sys.modules[__name__])
+            checks["embodied_ui"] = ui_smoke["embodied"]["ok"]
         except Exception as exc:
             ui_smoke["error"] = f"{type(exc).__name__}: {exc}"
         finally:

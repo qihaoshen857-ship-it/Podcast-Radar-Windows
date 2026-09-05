@@ -1,6 +1,6 @@
 # Podcast Radar for Windows
 
-Podcast Radar 是一款面向研究和深度阅读的桌面播客工具。它会发现 AI、AI 创业、天气、养生等主题的新节目，也能跟踪 Dylan Patel、Elon Musk 等人物访谈，并把值得看的音频整理成中文研究材料。
+Podcast Radar 是一款面向研究和深度阅读的桌面播客工具。它会发现 AI、AI 创业、具身智能、天气、养生等主题的新节目，也能跟踪 Dylan Patel、Elon Musk 等人物访谈，并把值得看的音频整理成中文研究材料。
 
 Windows 版与 Mac 版共用同一套核心功能，转录默认采用**本地 Whisper 优先**；如果你更看重速度，也可以在设置中填写自己的阿里云 DashScope API Key，切换到云端 ASR。
 
@@ -18,7 +18,7 @@ Windows 版与 Mac 版共用同一套核心功能，转录默认采用**本地 W
 ## 第一次使用
 
 1. 打开 Podcast Radar，在首次弹窗中选择阿里云百炼或 DeepSeek，并填写自己的 API Key；也可选择稍后配置。
-2. 进入“今日雷达”，选择“综合 / AI / AI 创业 / 天气 / 养生”，点击刷新获取最新节目。
+2. 进入“今日雷达”，选择“综合 / AI / AI 创业 / 机器人 / 天气 / 养生”，点击刷新获取最新节目。
 3. 选择节目后，可下载音频、转录、生成中文纪要或完整译文。
 4. 本地 Whisper 首次转录会下载模型，等待时间会比后续更长。
 5. 应用数据保存在 `%LOCALAPPDATA%\PodcastRadar`，卸载应用不会自动删除你的研究资料。
@@ -47,7 +47,7 @@ Windows 版与 Mac 版共用同一套核心功能，转录默认采用**本地 W
 
 ## 版本
 
-当前 Windows 版为 Podcast Radar v0.4.44。该版优化了长英文标题的两行显示、简介去重和完整标题提示；即使未配置标题翻译 API，节目卡片也不会再发生标题重叠或显示不全。
+当前 Windows 版为 Podcast Radar v0.4.45。新增具身智能独立栏目，追踪人形机器人、模型、零部件和量产应用；保留长英文标题两行显示、简介去重、完整标题提示与 Windows 11 启动修复。详见 [栏目与评分说明](docs/EMBODIED_INTELLIGENCE.md)。
 
 ## License
 

@@ -11,6 +11,7 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 
 if (-not $SkipTests) {
     & $Python -m pytest -q
+    if ($LASTEXITCODE -ne 0) { throw "Tests failed with exit code $LASTEXITCODE" }
 }
 
 & $Python (Join-Path $Root "tools\generate_windows_icon.py")
@@ -47,7 +48,7 @@ $ReleaseDir = Join-Path $Root "release_windows"
 if (Test-Path $ReleaseDir) { Remove-Item -Recurse -Force $ReleaseDir }
 New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
 
-$Portable = Join-Path $ReleaseDir "PodcastRadar-Portable-0.4.44-x64.zip"
+$Portable = Join-Path $ReleaseDir "PodcastRadar-Portable-0.4.45-x64.zip"
 Compress-Archive -Path "dist_windows\Podcast Radar\*" -DestinationPath $Portable -CompressionLevel Optimal
 
 $Iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
